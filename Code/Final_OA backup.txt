@@ -1,0 +1,105 @@
+from pico_rdp import Motor, Speed, Servo, Ultrasonic, mapping
+import time
+import pico_4wd as car
+
+# Constants
+RADAR_REFERENCE = 20  # Reference distance for radar detection
+RADAR_STEP_ANGLE = 10  # Angle step for radar scanning
+MOTOR_FORWARD_POWER = 40  # Power for forward movement
+MOTOR_TURNING_POWER = 50  # Power for turning
+FORWARD_SCAN_ANGLE = 50  # Angle for forward radar scan
+
+# Set radar scan angle
+car.set_radar_scan_angle(FORWARD_SCAN_ANGLE)  # Initialize radar scan angle
+status = "Object Detected"  # Initial status message
+def get_widest_path_direction(radar_data):
+    # Convert radar data to a string
+    radar_data_str = "".join(map(str, radar_data))
+    
+    # Split radar data into paths using "0" as separator
+    paths = radar_data_str.split("0")
+    
+    # Calculate the length of the widest path
+    max_path_length = max(len(path) for path in paths)
+    
+    # If the widest path is very narrow, choose "left" as the direction
+    if max_path_length < 4:
+        return "left"
+    
+    # Find the index of the widest path
+    widest_path_index = paths.index(max(paths, key=len))
+    
+    # Calculate the middle index of the widest path
+    widest_path_middle = radar_data_str.index(paths[widest_path_index]) + (len(paths[widest_path_index]) - 1) / 2
+    
+    # Calculate the delta for direction determination
+    delta = len(radar_data_str) / 3
+    
+    # Determine the direction based on the position of the widest path
+    if widest_path_middle < delta:
+        return "left"
+    elif widest_path_middle > 2 * delta:
+        return "right"
+    else:
+        return "forward"
+    
+
+# Main control loop
+def main():
+    global status
+    
+    while True:
+        # Perform radar scan
+        radar_data = car.radar_scan()
+        
+        # Check if radar scan is still in progress (int indicates angle status)
+        if isinstance(radar_data, int):
+            # Check if an object is detected and change status if necessary
+            if radar_data == 0 and status != "Object":
+                print("Object detected!")
+                status = "Object"
+                car.move("stop")
+                car.set_radar_scan_angle(180)
+            continue
+        else:
+            status = "Save"
+            
+        # Determine the direction to move based on the widest path
+        direction = get_widest_path_direction(radar_data)
+        
+        # Take action based on the determined direction
+        if direction == "left":
+            print("Turn left")
+            car.move("left", MOTOR_TURNING_POWER)
+            
+            # Continue turning until a clear path is found
+            while True:
+                distance = car.get_radar_distance_at(-FORWARD_SCAN_ANGLE / 2)
+                status = car.get_radar_status(distance)
+                if status == 1:
+                    break
+            car.move("stop")
+            
+        elif direction == "right":
+            print("Turn right")
+            car.move("right", MOTOR_TURNING_POWER)
+            
+            # Continue turning until a clear path is found
+            while True:
+                distance = car.get_radar_distance_at(FORWARD_SCAN_ANGLE / 2)
+                status = car.get_radar_status(distance)
+                if status == 1:
+                    break
+            car.move("stop")
+            
+        else:
+            print("Go forward")
+            car.set_radar_scan_angle(FORWARD_SCAN_ANGLE)
+            car.move("forward", MOTOR_FORWARD_POWER)
+
+# Main program execution
+try:
+    main()
+finally:
+    car.move("Complete stop")
+

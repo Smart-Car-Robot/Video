@@ -1,0 +1,152 @@
+from pico_rdp import Motor, Speed, Servo, Ultrasonic, mapping
+from machine import Pin, ADC
+import time
+
+motors = [Motor(pin_a, pin_b, dir) for pin_a, pin_b, dir in [(17, 16, -1), (15, 14, 1), (13, 12, -1), (11, 10, 1)]]
+
+# Create an instance of the Ultrasonic sensor with trigger pin 6 and echo pin 7
+sonar = Ultrasonic(6, 7)
+
+# Create an instance of the Servo class with control pin 18 for radar movement
+servo = Servo(18)
+
+# List to store radar scan data
+radar_data = []
+
+# Constants for radar configuration
+RADAR_REFERENCE = 20  # Reference distance for radar detection
+RADAR_MAX_ANGLE = 90  # Maximum radar scan angle (degrees)
+RADAR_MIN_ANGLE = -90  # Minimum radar scan angle (degrees)
+RADAR_STEP_ANGLE = 10  # Angle step for radar scanning (degrees)
+
+# Initialize radar scan parameters
+radar_step = -RADAR_STEP_ANGLE  # Step direction for radar scanning
+radar_angle = 0  # Current radar scan angle (degrees)
+radar_scan_angle = 180  # Default radar scan angle (degrees)
+
+# Radar
+def get_radar_distance_at(angle):
+    """
+    Get distance from the ultrasonic sensor at the specified angle.
+    """
+    servo.set_angle(angle)
+    time.sleep(0.04)
+    distance = sonar.get_distance()
+    return distance
+
+def get_radar_distance():
+    """
+    Get the distance and angle of radar scanning, updating the angle for the next scan.
+    :return: A tuple containing the current radar angle and the measured distance.
+    """
+    global radar_angle, radar_step
+    radar_angle += radar_step
+    
+    # Ensure the radar angle stays within the limits
+    if radar_angle >= RADAR_MAX_ANGLE:
+        radar_angle = RADAR_MAX_ANGLE
+        radar_step = -RADAR_STEP_ANGLE
+    elif radar_angle <= RADAR_MIN_ANGLE:
+        radar_angle = RADAR_MIN_ANGLE
+        radar_step = RADAR_STEP_ANGLE
+        
+    # Get the distance at the current radar angle
+    distance = get_radar_distance_at(radar_angle)
+    
+    # Return a tuple containing angle and distance
+    return radar_angle, distance
+
+def set_radar_scan_angle(angle):
+    """
+    Set the angle of radar scanning and update related parameters.
+    """
+    global RADAR_MAX_ANGLE, RADAR_MIN_ANGLE, radar_angle, radar_step, radar_scan_angle
+    if radar_scan_angle == angle:
+        return
+    radar_scan_angle = angle
+    RADAR_MAX_ANGLE = int(angle / 2)
+    RADAR_MIN_ANGLE = -RADAR_MAX_ANGLE
+    if radar_step < 0:
+        radar_angle = RADAR_MIN_ANGLE
+        radar_step = RADAR_STEP_ANGLE
+    else:
+        radar_angle = RADAR_MAX_ANGLE
+        radar_step = -RADAR_STEP_ANGLE
+    servo.set_angle(radar_angle)
+
+def get_radar_status(distance):
+    """
+    Determine radar status based on distance compared to reference.
+    """
+    if distance > RADAR_REFERENCE:
+        return 1
+    else:
+        return 0
+
+def radar_scan():
+    """
+    Perform a radar scan, updating radar data and returning the results.
+    :return: A list containing the radar scan data or a single status value if the scan is ongoing.
+    """
+    global radar_data
+    
+    # Get the current radar angle and distance
+    angle, distance = get_radar_distance()
+    
+    # Determine the radar status based on the measured distance
+    status = get_radar_status(distance)
+
+    # Append the status to the radar data list
+    radar_data.append(status)
+    
+    # Check if the angle is at the min or max limit
+    if angle == RADAR_MIN_ANGLE or angle == RADAR_MAX_ANGLE:
+        if radar_step < 0:
+            # Reverse the radar data if the radar is moving in reverse
+            radar_data.reverse()
+        tmp = radar_data.copy()
+        
+        # Clear the radar data list for the next scan
+        radar_data = []
+        return tmp
+    else:
+        # If scan is ongoing, return the current status
+        return status
+    
+    
+# slowly increase power of the motor, to avoid hight reverse voltage from motors
+def set_motor_power_gradually(*powers):
+    flags = [True, True, True, True]
+    while flags[0] or flags[1] or flags[2] or flags[3]:
+        for i, motor in enumerate(motors):
+            # print(motor.power, powers[i])
+            if motor.power > powers[i]:
+                motor.power -= 1
+            elif motor.power < powers[i]:
+                motor.power += 1
+            else:
+                flags[i] = False
+        time.sleep_ms(1)
+
+
+# Define motor power configurations for different directions
+MOTOR_CONFIGS = {
+    "forward":  (1, 1, 1, 1),
+    "backward": (-1, -1, -1, -1),
+    "left":     (-1, 1, -1, 1),
+    "right":    (1, -1, 1, -1),
+    "stop":     (0, 0, 0, 0)
+}
+
+# Set power to all motors
+def set_motor_power(powers):
+    for motor, power in zip(motors, powers):
+        motor.power = power
+        
+# Move the car
+def move(dir, power=0):
+    if dir in MOTOR_CONFIGS:
+        set_motor_power([p * power for p in MOTOR_CONFIGS[dir]])
+    else:
+        set_motor_power([0, 0, 0, 0])
+
