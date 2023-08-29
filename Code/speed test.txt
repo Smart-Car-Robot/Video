@@ -1,0 +1,33 @@
+from pico_4wd import move, speed
+import time
+
+
+def test_speed():
+    actions = {
+        "forward": move,
+        "stop": move,
+        "light_off": set_light_off
+    }
+
+    def helper(action, power):
+        power = round(power / 10) * 10
+        actions[action]("forward", power)
+        print('Power(%): %d Speed(cm/s): %.2f' % (power, speed()))
+        time.sleep(0.2)
+
+    while True:
+        for power in range(100):
+            helper("forward", power)
+
+        for power in range(100, -100, -1):
+            helper("forward", power)
+
+        for power in range(-100, 0):
+            helper("forward", power)
+
+
+try:
+    with car:
+        test_speed()
+finally:
+    car.move("stop")
