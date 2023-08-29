@@ -2,14 +2,15 @@ import pico_4wd as car
 import time
 
 def test_sonar():
+    """
+    Continuously test the ultrasonic sensor's distance measurement.
+    """
     while True:
         distance = car.sonar.get_distance()
-        print('distance:%s'% distance)
+        print('Distance: %s' % distance)
         time.sleep(1)
 
 try:
-
     test_sonar()
-
 finally:
     car.move("stop")
