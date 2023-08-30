@@ -1,33 +1,36 @@
-from pico_4wd import move, speed
+import pico_4wd as car
 import time
 
-
 def test_speed():
-    actions = {
-        "forward": move,
-        "stop": move,
-        "light_off": set_light_off
-    }
-
-    def helper(action, power):
+    """
+    Test different motor speeds by gradually changing the power levels.
+    """
+    def adjust_power(power):
+        """
+        Adjust the motor power and display the speed.
+        
+        :param power: Power level for the motor.
+        """
+        # Power changes every 10%
         power = round(power / 10) * 10
-        actions[action]("forward", power)
-        print('Power(%): %d Speed(cm/s): %.2f' % (power, speed()))
+        car.move("forward", power)
+        print('Power(%%): %d Speed(cm/s): %.2f' % (power, car.speed()))
         time.sleep(0.2)
-
+    
     while True:
-        for power in range(100):
-            helper("forward", power)
+        # Increase power from 0 to 90
+        for power in range(0, 91):
+            adjust_power(power)
 
-        for power in range(100, -100, -1):
-            helper("forward", power)
+        # Decrease power from 90 to -90
+        for power in range(90, -91, -1):
+            adjust_power(power)
 
-        for power in range(-100, 0):
-            helper("forward", power)
-
+        # Increase power from -90 to -10
+        for power in range(-90, -9):
+            adjust_power(power)
 
 try:
-    with car:
-        test_speed()
+    test_speed()
 finally:
     car.move("stop")
